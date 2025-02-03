@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Realistic Snowflake Simulation – Flowing with the Wind</title>
+  <style>
+    /* The canvas fills the screen with a dark background */
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script>
+    // --- Canvas Setup ---
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // --- Physics Constants ---
+    const GRAVITY = 30;          // Downward acceleration (pixels/s²)
+    const DRAG = 0.05;           // Simplified drag coefficient
+    const WIND_STRENGTH = 10;    // Base wind acceleration (pixels/s²)
+    const TURBULENCE = 2;        // Random turbulence factor
+
+    // --- Helper Function for Angle Interpolation ---
+    // Smoothly interpolates between two angles, accounting for wrapping.
+    function lerpAngle(a, b, t) {
+      let diff = b - a;
+      while (diff < -Math.PI) diff += 2 * Math.PI;
+      while (diff > Math.PI) diff -= 2 * Math.PI;
+      return a + diff * t;
+    }
+
+    // --- Snowflake Class ---
+    class Snowflake {
+      constructor() {
+        this.reset(true);
+      }
+      
+      // Reset the snowflake’s position and properties.
+      // "initial" determines whether to start at a random vertical position
+      // or just above the canvas (for recycled flakes).
+      reset(initial = false) {
+        this.x = Math.random() * canvas.width;
+        this.y = initial ? Math.random() * canvas.height : -10;
+        this.vx = 0;
+        this.vy = 0;
+        this.size = Math.random() * 2 + 2;  // Affects both drawn size and branch length.
+        // Start with a random rotation.
+        this.angle = Math.random() * Math.PI * 2;
+        // A slight random spin (in case there’s little wind)
+        this.angularVelocity = (Math.random() - 0.5) * 0.5;
+      }
+      
+      // Update the snowflake's position, velocity, and orientation.
+      update(dt, time) {
+        // Compute a wind acceleration that varies with time and horizontal position.
+        const windAcc = WIND_STRENGTH * Math.sin(time / 1000 + this.x / 100);
+        // Add random turbulence to simulate gusts.
+        const turbulenceAcc = (Math.random() - 0.5) * TURBULENCE;
+        
+        // Compute accelerations along x and y.
+        const ax = windAcc + turbulenceAcc - DRAG * this.vx;
+        const ay = GRAVITY - DRAG * this.vy;
+        
+        // Update velocities.
+        this.vx += ax * dt;
+        this.vy += ay * dt;
+        
+        // Update positions.
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        
+        // --- Align the Snowflake with the Wind ---
+        // Compute the desired angle from the velocity vector.
+        const desiredAngle = Math.atan2(this.vy, this.vx);
+        // A constant determining how quickly the snowflake rotates to align with its velocity.
+        const ALIGNMENT_RATE = 2;
+        // Combine the small independent rotation with a smooth alignment toward the flow direction.
+        this.angle = lerpAngle(this.angle + this.angularVelocity * dt, desiredAngle, ALIGNMENT_RATE * dt);
+        
+        // If the snowflake leaves the view, reset it.
+        if (this.y > canvas.height + 10 || this.x < -50 || this.x > canvas.width + 50) {
+          this.reset();
+        }
+      }
+      
+      // Draw the snowflake.
+      draw(ctx) {
+        ctx.save();
+        // Translate and rotate so that the drawn shape is aligned with the current angle.
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        // Use semi-transparent white for a soft, overlapping appearance.
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        // Draw a 6-armed star pattern to mimic a snowflake.
+        for (let i = 0; i < 6; i++) {
+          // Main branch.
+          ctx.moveTo(0, 0);
+          ctx.lineTo(this.size * 5, 0);
+          // Side branches on the main branch.
+          ctx.moveTo(this.size * 3, 0);
+          ctx.lineTo(this.size * 2.5, -this.size);
+          ctx.moveTo(this.size * 3, 0);
+          ctx.lineTo(this.size * 2.5, this.size);
+          ctx.rotate(Math.PI / 3);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    
+    // --- Create the Snowflake Field ---
+    const NUM_SNOWFLAKES = 300;
+    const snowflakes = [];
+    for (let i = 0; i < NUM_SNOWFLAKES; i++) {
+      snowflakes.push(new Snowflake());
+    }
+    
+    // --- Animation Loop ---
+    let lastTime = performance.now();
+    function animate() {
+      const currentTime = performance.now();
+      // Compute elapsed time (dt) in seconds.
+      const dt = (currentTime - lastTime) / 1000;
+      lastTime = currentTime;
+      
+      // Clear the canvas.
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Update and draw each snowflake.
+      for (let flake of snowflakes) {
+        flake.update(dt, currentTime);
+        flake.draw(ctx);
+      }
+      
+      requestAnimationFrame(animate);
+    }
+    
+    // Start the simulation.
+    animate();
+  </script>
+</body>
+</html>
